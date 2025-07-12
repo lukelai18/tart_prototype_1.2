@@ -3,6 +3,7 @@ import SwiftUI
 struct LoginView: View {
     @StateObject private var loginModel = LoginModel()
     @State private var currentScreen: Screen = .welcome
+    @AppStorage("isLoggedIn") var isLoggedIn: Bool = false
     
     enum Screen {
         case welcome
@@ -24,6 +25,11 @@ struct LoginView: View {
                 case .verifyEmail:
                     VerifyEmailView(currentScreen: $currentScreen, loginModel: loginModel)
                 }
+            }
+        }
+        .onChange(of: loginModel.isAuthenticated) { authenticated in
+            if authenticated {
+                isLoggedIn = true
             }
         }
     }
@@ -113,6 +119,7 @@ struct SigninView: View {
     @Binding var currentScreen: LoginView.Screen
     @ObservedObject var loginModel: LoginModel
     @State private var email: String = ""
+    @State private var password: String = ""
     @State private var rememberMe: Bool = false
     @State private var showError = false
     
@@ -174,6 +181,7 @@ struct SigninView: View {
                         .background(Color(UIColor.systemGray6))
                         .cornerRadius(12)
                     }
+                    .disabled(loginModel.isLoading)
                     
                     Button(action: {
                         Task {
@@ -202,6 +210,7 @@ struct SigninView: View {
                         .background(Color(UIColor.systemGray6))
                         .cornerRadius(12)
                     }
+                    .disabled(loginModel.isLoading)
                     
                     Button(action: {
                         Task {
@@ -229,6 +238,7 @@ struct SigninView: View {
                         .background(Color(UIColor.systemGray6))
                         .cornerRadius(12)
                     }
+                    .disabled(loginModel.isLoading)
                     
                     // Or text
                     Text("Or")
@@ -242,6 +252,20 @@ struct SigninView: View {
                             .foregroundColor(.gray)
                         
                         TextField("Your email", text: $email)
+                            .font(AppFont.body.font)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                    }
+                    .padding()
+                    .background(Color(UIColor.systemGray6))
+                    .cornerRadius(12)
+                    
+                    // Password field
+                    HStack {
+                        Image(systemName: "lock")
+                            .foregroundColor(.gray)
+                        SecureField("Password", text: $password)
                             .font(AppFont.body.font)
                     }
                     .padding()
@@ -278,22 +302,30 @@ struct SigninView: View {
                     Button(action: {
                         Task {
                             do {
-                                try await loginModel.signInWithEmail(email, rememberMe: rememberMe)
-                                currentScreen = .verifyEmail
+                                try await loginModel.signInWithEmail(email, password: password)
                             } catch {
                                 showError = true
                             }
                         }
                     }) {
-                        Text("Sign in")
-                            .font(AppFont.bodyBold.font)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
-                            .background(Color(red: 0.3, green: 0.3, blue: 0.3))
-                            .cornerRadius(12)
+                        if loginModel.isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(Color(red: 0.3, green: 0.3, blue: 0.3))
+                                .cornerRadius(12)
+                        } else {
+                            Text("Sign in")
+                                .font(AppFont.bodyBold.font)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(Color(red: 0.3, green: 0.3, blue: 0.3))
+                                .cornerRadius(12)
+                        }
                     }
-                    .disabled(loginModel.isLoading)
+                    .disabled(loginModel.isLoading || email.isEmpty || password.isEmpty)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 32)
@@ -316,9 +348,16 @@ struct SigninView: View {
             }
         }
         .alert("Error", isPresented: $showError) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) {
+                loginModel.clearError()
+            }
         } message: {
             Text(loginModel.error ?? "An error occurred")
+        }
+        .onChange(of: loginModel.error) { error in
+            if error != nil {
+                showError = true
+            }
         }
     }
 }
@@ -434,30 +473,46 @@ struct VerifyEmailView: View {
                     Task {
                         do {
                             let otp = otpFields.joined()
-                            try await loginModel.verifyOTP(otp)
-                            // TODO: 处理登录成功后的导航
+                            let username = loginModel.currentUser?.username ?? ""
+                            try await loginModel.verifyOTP(username, otp: otp)
                         } catch {
                             showError = true
                         }
                     }
                 }) {
-                    Text("Sign in")
-                        .font(AppFont.bodyBold.font)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(Color(red: 0.3, green: 0.3, blue: 0.3))
-                        .cornerRadius(12)
+                    if loginModel.isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color(red: 0.3, green: 0.3, blue: 0.3))
+                            .cornerRadius(12)
+                    } else {
+                        Text("Verify Email")
+                            .font(AppFont.bodyBold.font)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color(red: 0.3, green: 0.3, blue: 0.3))
+                            .cornerRadius(12)
+                    }
                 }
-                .disabled(loginModel.isLoading)
+                .disabled(loginModel.isLoading || otpFields.joined().count != 6)
                 .padding(.bottom, 32)
             }
             .padding(.horizontal, 24)
         }
         .alert("Error", isPresented: $showError) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) {
+                loginModel.clearError()
+            }
         } message: {
             Text(loginModel.error ?? "An error occurred")
+        }
+        .onChange(of: loginModel.error) { error in
+            if error != nil {
+                showError = true
+            }
         }
     }
 }
@@ -513,6 +568,7 @@ struct RegisterView: View {
     @ObservedObject var loginModel: LoginModel
     @State private var email: String = ""
     @State private var username: String = ""
+    @State private var password: String = ""
     @State private var showError = false
     
     var body: some View {
@@ -551,7 +607,6 @@ struct RegisterView: View {
                         Task {
                             do {
                                 try await loginModel.registerWithGoogle()
-                                // 注册成功后可以直接进入主应用或显示成功页面
                             } catch {
                                 showError = true
                             }
@@ -580,7 +635,6 @@ struct RegisterView: View {
                         Task {
                             do {
                                 try await loginModel.registerWithApple()
-                                // 注册成功后可以直接进入主应用或显示成功页面
                             } catch {
                                 showError = true
                             }
@@ -641,6 +695,17 @@ struct RegisterView: View {
                     .background(Color(UIColor.systemGray6))
                     .cornerRadius(12)
                     
+                    // Password field
+                    HStack {
+                        Image(systemName: "lock")
+                            .foregroundColor(.gray)
+                        SecureField("Password", text: $password)
+                            .font(AppFont.body.font)
+                    }
+                    .padding()
+                    .background(Color(UIColor.systemGray6))
+                    .cornerRadius(12)
+                    
                     // Terms and privacy notice
                     Text("By registering, you agree to our Terms of Service and Privacy Policy")
                         .font(AppFont.caption.font)
@@ -652,8 +717,10 @@ struct RegisterView: View {
                     Button(action: {
                         Task {
                             do {
-                                try await loginModel.registerWithEmail(email, username: username)
-                                currentScreen = .verifyEmail
+                                try await loginModel.registerWithEmail(email, username: username, password: password)
+                                if loginModel.needsEmailVerification {
+                                    currentScreen = .verifyEmail
+                                }
                             } catch {
                                 showError = true
                             }
@@ -676,7 +743,7 @@ struct RegisterView: View {
                                 .cornerRadius(12)
                         }
                     }
-                    .disabled(loginModel.isLoading || email.isEmpty || username.isEmpty)
+                    .disabled(loginModel.isLoading || email.isEmpty || username.isEmpty || password.isEmpty)
                     
                     // Login link
                     Button(action: {
@@ -725,9 +792,16 @@ struct RegisterView: View {
             }
         }
         .alert("Error", isPresented: $showError) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) {
+                loginModel.clearError()
+            }
         } message: {
             Text(loginModel.error ?? "An error occurred")
+        }
+        .onChange(of: loginModel.error) { error in
+            if error != nil {
+                showError = true
+            }
         }
     }
 }

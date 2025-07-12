@@ -1,0 +1,12 @@
+projects:
+  tarttest:
+    schemaPath: graphql/schema.json
+    includes:
+      - graphQL
+    excludes:
+      - ./amplify/**
+    extensions:
+      amplify:
+        codeGenTarget: swift
+        generatedFileName: API.swift
+        docsFilePath: .

@@ -5,6 +5,9 @@ struct SettingsView: View {
     @State private var navigateToAccountSettings = false
     @State private var navigateToPrivacySettings = false
     @State private var navigateToNotificationSettings = false
+    @AppStorage("isLoggedIn") var isLoggedIn: Bool = true
+    @StateObject private var loginModel = LoginModel()
+    @State private var showLogoutAlert = false
     
     var body: some View {
             VStack(spacing: 0) {
@@ -98,16 +101,26 @@ struct SettingsView: View {
                         
                         // Log Out button
                         Button(action: {
-                            // Handle logout
+                            showLogoutAlert = true
                         }) {
-                            Text("Log Out")
-                                .font(AppFont.body.font)
-                                .foregroundColor(.black)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
+                            if loginModel.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(8)
+                            } else {
+                                Text("Log Out")
+                                    .font(AppFont.body.font)
+                                    .foregroundColor(.black)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
                         }
+                        .disabled(loginModel.isLoading)
                         .padding(.horizontal)
                     }
                     .padding(.top)
@@ -141,6 +154,17 @@ struct SettingsView: View {
                         // Also hide navigation bar when view appears
                         UINavigationBar.appearance().isHidden = false
                     }
+            .alert("Log Out", isPresented: $showLogoutAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Log Out", role: .destructive) {
+                    Task {
+                        await loginModel.signOut()
+                        isLoggedIn = false
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to log out?")
+            }
         }
     }
 

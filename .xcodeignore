@@ -1,0 +1,3 @@
+# Exclude Amplify build files from app bundle
+amplify/
+*.amplifyignore
